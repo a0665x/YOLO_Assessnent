@@ -1,0 +1,22 @@
+services:
+  yolo-assessment:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: model-assessment-webui:latest
+    container_name: model-assessment-webui
+    restart: unless-stopped
+    environment:
+      PORT: "${PORT:-7860}"
+      DOWNLOAD_DIR: /app/downloads
+    ports:
+      - "${HOST_PORT:-7860}:${PORT:-7860}"
+    volumes:
+      - ./models:/app/models:ro
+      - ./videos:/app/videos:ro
+      - ./images:/app/images
+      - ./reports:/app/reports
+      - ./outputs:/app/outputs
+      - ${DOWNLOAD_DIR:-/home/nvidia/Downloads}:/app/downloads
+      - /dev:/dev
+    privileged: true

@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.git/
+.agents/
+.codex/
+reports/
+outputs/
+models/
+videos/
+images/
+*.log

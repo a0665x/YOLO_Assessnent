@@ -1,0 +1,42 @@
+# Local AI/editor/session metadata
+.codex/
+.agents/
+
+# Python runtime artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Logs and temporary files
+*.log
+*.tmp
+.DS_Store
+
+# Runtime-generated assessment outputs
+reports/*
+downloads/*
+outputs/*
+
+# Local image batch inputs
+images/*
+
+# Keep runtime directories visible in a fresh clone
+!models/.gitkeep
+!videos/.gitkeep
+!images/.gitkeep
+!reports/.gitkeep
+!downloads/.gitkeep
+!outputs/.gitkeep
+
+# Docker/local environment overrides
+.env
+.env.*
+docker-compose.override.yml

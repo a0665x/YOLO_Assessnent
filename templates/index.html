@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>YOLO Inference Assessment</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1 data-i18n="app_title">YOLO Inference Assessment</h1>
+      <p data-i18n="app_subtitle">量化影片品質、bbox 尺寸、輪廓清晰度與模型感知信心的關係</p>
+    </div>
+    <div class="top-actions">
+      <label class="sr-only" for="languageSelect">Language</label>
+      <select id="languageSelect" class="language-select" aria-label="Language">
+        <option value="zh">中</option>
+        <option value="en">EN</option>
+        <option value="ja">日</option>
+        <option value="ko">한</option>
+      </select>
+      <div class="status-pill" id="runState">Idle</div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel controls" aria-label="Assessment controls">
+      <div class="section-title">
+        <h2 data-i18n="run_setup">Run Setup</h2>
+        <span data-i18n="model_source">Model / Source</span>
+      </div>
+
+      <label for="modelSelect" data-i18n="tflite_model">TFLite model</label>
+      <div class="inline">
+        <select id="modelSelect"></select>
+        <button id="loadModelBtn" type="button" class="secondary" data-i18n="load">Load</button>
+      </div>
+
+      <fieldset>
+        <legend data-i18n="image_source">Image source</legend>
+        <label class="radio-row">
+          <input type="radio" name="sourceType" value="video" checked>
+          <span data-i18n="video_file">Video file</span>
+        </label>
+        <label class="radio-row">
+          <input type="radio" name="sourceType" value="webcam">
+          <span data-i18n="webcam">Webcam</span>
+        </label>
+        <label class="radio-row">
+          <input type="radio" name="sourceType" value="images">
+          <span data-i18n="image_files">Image files</span>
+        </label>
+      </fieldset>
+
+      <div class="source-panel" id="videoPanel">
+        <label for="videoSelect" data-i18n="video">Video</label>
+        <select id="videoSelect"></select>
+      </div>
+
+      <div class="source-panel hidden" id="webcamPanel">
+        <label for="webcamIndex" data-i18n="webcam_index">Webcam index</label>
+        <input id="webcamIndex" type="number" min="0" value="0">
+      </div>
+
+      <div class="source-panel hidden" id="imagesPanel">
+        <div class="section-title compact">
+          <h2 data-i18n="image_manager">Images File Manager</h2>
+          <span data-i18n="images_path">Path: images/</span>
+        </div>
+        <div class="image-list" id="imageList"></div>
+        <label for="datasetUrl" data-i18n="download_url">Public image URL</label>
+        <input id="datasetUrl" type="url" placeholder="https://example.com/person.jpg">
+        <button id="downloadImageBtn" type="button" class="secondary" data-i18n="download_image">Download to images/</button>
+        <p class="hint" data-i18n="image_tracking_note">Image files are discrete samples; tracking quality is not evaluated.</p>
+      </div>
+
+      <div class="two">
+        <div>
+          <label for="confThreshold" data-i18n="conf_threshold">Conf threshold</label>
+          <input id="confThreshold" type="number" min="0.01" max="0.99" step="0.01" value="0.25">
+        </div>
+        <div>
+          <label for="sampleStride" data-i18n="frame_stride">Frame stride</label>
+          <input id="sampleStride" type="number" min="1" max="30" step="1" value="1">
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="startBtn" type="button" data-i18n="start_analysis">Start Analysis</button>
+        <button id="stopBtn" type="button" class="secondary" data-i18n="stop">Stop</button>
+      </div>
+
+      <div class="report-box">
+        <label for="reportName" data-i18n="report_name">Report name</label>
+        <input id="reportName" type="text" value="customer_model_quality">
+        <label for="reportTags" data-i18n="tags">Tags</label>
+        <input id="reportTags" type="text" placeholder="night, dashcam, v1">
+        <button id="reportBtn" type="button" class="accent" data-i18n="export_report">Export Report</button>
+        <p id="reportResult" class="hint"></p>
+      </div>
+    </section>
+
+    <section class="workspace">
+      <div class="metrics-grid">
+        <article class="metric"><span data-i18n="object_samples">Object Samples</span><strong id="mSamples">0</strong></article>
+        <article class="metric"><span data-i18n="avg_conf">Avg Conf</span><strong id="mConf">0.00</strong></article>
+        <article class="metric"><span data-i18n="avg_bbox_px">Avg BBox px</span><strong id="mArea">0</strong></article>
+        <article class="metric"><span data-i18n="sharpness">Sharpness</span><strong id="mSharp">0</strong></article>
+        <article class="metric"><span data-i18n="recommended">Recommended</span><strong id="mRecommended">0%</strong></article>
+      </div>
+
+      <section class="viewer-panel">
+        <div class="section-title">
+          <h2 data-i18n="live_view">Live Perception View</h2>
+          <span id="progressText">Frame 0</span>
+        </div>
+        <div class="viewer">
+          <img id="streamImg" src="/stream" alt="Live inference overlay">
+        </div>
+      </section>
+
+      <section class="data-row split-charts resizable-row" data-split-id="matrix-radar">
+        <div class="panel chart-panel dark-panel">
+          <div class="section-title">
+            <h2 data-i18n="matrix_title">BBox Size / Confidence Matrix</h2>
+            <span data-i18n="matrix_subtitle">Rows: conf · Columns: approx bbox (~w,~h)</span>
+          </div>
+          <canvas id="chart3d" width="760" height="420" aria-label="BBox size confidence matrix"></canvas>
+          <div class="bin-inspector hidden" id="binInspector">
+            <div class="section-title compact">
+              <h2 data-i18n="bin_inspector">Bin Sample Inspector</h2>
+              <span data-i18n="bin_inspector_sub">Click a matrix cell, then drag a rectangle on the sampled frame to understand bbox scale</span>
+            </div>
+            <div class="bin-toolbar">
+              <div>
+                <strong id="binSampleTitle" data-i18n="selected_bin">Selected bin</strong>
+                <p id="binSampleMeta" data-i18n="drag_hint">Drag a rectangle to show frame ratio and pixel W,H</p>
+              </div>
+              <button id="binResetBtn" type="button" class="secondary" data-i18n="reset_canvas">Reset Canvas</button>
+            </div>
+            <div class="bin-stage">
+              <img id="binSampleImage" alt="Selected bin frame sample">
+              <canvas id="binDrawCanvas" aria-label="Draw bbox scale rectangle"></canvas>
+            </div>
+            <div class="bin-stats" id="binDrawStats"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="section-title">
+            <h2 data-i18n="quality_radar">Image Quality Radar</h2>
+            <span data-i18n="quality_radar_sub">Whole-frame quality</span>
+          </div>
+          <canvas id="qualityRadarChart" width="420" height="300" aria-label="Image quality radar"></canvas>
+          <div class="radar-legend" id="qualityRadarLegend"></div>
+          <div class="section-title compact">
+            <h2 data-i18n="model_radar">Model Perception Radar</h2>
+            <span data-i18n="model_radar_sub">Detection confidence and bbox quality</span>
+          </div>
+          <canvas id="modelRadarChart" width="420" height="300" aria-label="Model perception radar"></canvas>
+          <div class="radar-legend" id="modelRadarLegend"></div>
+          <div class="recommendations" id="recommendations"></div>
+          <div class="recommendations" id="trackingRecommendations"></div>
+        </div>
+      </section>
+
+      <section class="data-row split-charts resizable-row" data-split-id="grade-violin">
+        <div class="panel chart-panel dark-panel">
+          <div class="section-title">
+            <h2 data-i18n="grade_distribution">A/B/C/D Grade Distribution</h2>
+            <span data-i18n="grade_distribution_sub">Live perception grade count and ratio</span>
+          </div>
+          <canvas id="gradeChart" width="640" height="420" aria-label="A/B/C/D grade distribution"></canvas>
+        </div>
+
+        <div class="panel chart-panel dark-panel">
+          <div class="section-title">
+            <h2 data-i18n="violin_distribution">Metric Distribution</h2>
+            <span data-i18n="violin_distribution_sub">Mean, std and percentile spread from current samples</span>
+          </div>
+          <canvas id="violinChart" width="640" height="420" aria-label="Metric violin distribution"></canvas>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-title">
+          <h2 data-i18n="bbox_metrics">Current BBox Metrics</h2>
+          <span data-i18n="person_only">Person detections only</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th data-i18n="track">Track</th>
+                <th data-i18n="conf">Conf</th>
+                <th data-i18n="approx_size">Frame %</th>
+                <th data-i18n="actual_size">Actual W x H</th>
+                <th data-i18n="sharp">Sharp</th>
+                <th>Tracking</th>
+                <th data-i18n="edge">Edge</th>
+                <th data-i18n="brightness">Brightness</th>
+                <th data-i18n="contrast">Contrast</th>
+                <th data-i18n="grade">Grade</th>
+              </tr>
+            </thead>
+            <tbody id="bboxRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-title">
+          <h2 data-i18n="classic_samples">Classic Samples</h2>
+          <span data-i18n="classic_samples_sub">Representative bbox examples and conditions</span>
+        </div>
+        <p class="sample-purpose" data-i18n="classic_samples_purpose">Classic Samples are representative quality cases: low contour, small target, and recommended quality. They are not per-ID stability samples; use Product Spec / tracking indicators for track stability.</p>
+        <div class="sample-grid" id="sampleGrid"></div>
+      </section>
+    </section>
+  </main>
+
+  <div class="modal" id="analysisModal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <button id="modalClose" class="modal-close" type="button" aria-label="Close analysis">×</button>
+      <div class="modal-grid">
+        <div>
+          <h2 id="modalTitle">BBox Analysis</h2>
+          <p id="modalSubtitle"></p>
+          <img id="modalImage" alt="Selected bbox analysis image">
+        </div>
+        <div>
+          <canvas id="modalRadar" width="420" height="340" aria-label="Selected bbox radar analysis"></canvas>
+          <div class="debug-strip" id="debugStrip"></div>
+          <div class="modal-metrics" id="modalMetrics"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="chart-tooltip" id="chartTooltip" role="tooltip"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
